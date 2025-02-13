@@ -1,0 +1,6 @@
+@AspnetcoreJwtTest_HostAddress = http://localhost:5298
+
+GET {{AspnetcoreJwtTest_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
