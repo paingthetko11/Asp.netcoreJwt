@@ -11,5 +11,8 @@ namespace AspnetcoreJwtTest
         }
 
         public DbSet<UserRefreshToken> UserRefreshTokens { get; set; }
+        public object Employees { get; internal set; }
+
+        public DbSet<Employee> Employee { get; set; }
     }
 }

@@ -1,4 +1,5 @@
-﻿using System.IdentityModel.Tokens.Jwt;
+﻿using System.Data;
+using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
@@ -6,6 +7,7 @@ using AspnetcoreJwtTest;
 using AspnetcoreJwtTest.Entities;
 using AspnetcoreJwtTest.Interfaces;
 using AspnetcoreJwtTest.Models;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.Data;
 using Microsoft.AspNetCore.Mvc;
@@ -25,26 +27,28 @@ namespace JwtTesting.Controllers
         private readonly IConfiguration _configuration;
         private readonly string _connectionString;
         private readonly SignInManager<IdentityUser> _signInManager;
+        private readonly RoleManager<IdentityRole> _roleManager;
 
         public AccountController(UserManager<IdentityUser> userManager,
             ITokenBuilder tokenBuilder,
-            ApplicationDbContext context,
-            IConfiguration configuration)
+            ApplicationDbContext context, RoleManager<IdentityRole> roleManager,
+            IConfiguration configuration, SignInManager<IdentityUser> signInManager)
         {
             _userManager = userManager;
             _tokenBuilder = tokenBuilder;
+            _roleManager = roleManager;
             _context = context;
             _configuration = configuration;
+            _signInManager = signInManager;
             _connectionString = configuration.GetConnectionString("DefaultConnection");
         }
 
         [HttpPost("register")]
-        public async Task<IActionResult> Register([FromBody] User model)
+        public async Task<IActionResult> Register([FromBody] RegisterModel model)
         {
+            // Check if the user already exists
             if (await _userManager.Users.AnyAsync(u => u.Email == model.Email))
-            {
                 return BadRequest("User with this email already exists.");
-            }
 
             var user = new IdentityUser
             {
@@ -53,12 +57,22 @@ namespace JwtTesting.Controllers
             };
 
             var result = await _userManager.CreateAsync(user, model.Password);
-            if (result.Succeeded)
+            if (!result.Succeeded)
+                return BadRequest(result.Errors);
+
+            // Assign the role (default "User" if not provided)
+            var role = string.IsNullOrEmpty(model.Role) ? "User" : model.Role;
+            if (!await _roleManager.RoleExistsAsync(role))
             {
-                return Ok("User registered successfully.");
+                await _roleManager.CreateAsync(new IdentityRole(role));
             }
-            return BadRequest(result.Errors);
+
+            await _userManager.AddToRoleAsync(user, role);
+
+            return Ok(new { message = "User registered successfully." });
         }
+
+
         [HttpPost("login")]
         public async Task<IActionResult> Login([FromBody] Login login)
         {
@@ -79,27 +93,31 @@ namespace JwtTesting.Controllers
         private async Task<(string, string, DateTime)> GenerateJwtToken(IdentityUser user)
         {
             var jwtSettings = _configuration.GetSection("Jwt");
-            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSettings["Key"] ?? throw new InvalidOperationException("JWT Key not found")));
+            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSettings["Key"]));
             var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
-            var claims = new[]
-            {
+            var claims = new List<Claim>
+    {
         new Claim(JwtRegisteredClaimNames.Sub, user.Id),
-        new Claim(JwtRegisteredClaimNames.Email, user.Email ?? string.Empty),
-        new Claim(ClaimTypes.NameIdentifier, user.Id) // ✅ Ensure this is set
+        new Claim(JwtRegisteredClaimNames.Email, user.Email),
+        new Claim(ClaimTypes.NameIdentifier, user.Id)
     };
+
+            var roles = await _userManager.GetRolesAsync(user);
+            foreach (var role in roles)
+            {
+                claims.Add(new Claim(ClaimTypes.Role, role));
+            }
 
             var token = new JwtSecurityToken(
                 issuer: jwtSettings["Issuer"],
                 audience: jwtSettings["Audience"],
                 claims: claims,
-                expires: DateTime.UtcNow.AddMinutes(1), // Access token expires in 1 minute
+                expires: DateTime.UtcNow.AddMinutes(1),
                 signingCredentials: creds
             );
 
             var (refreshToken, refreshTokenExpiry) = GenerateRefreshToken();
-
-            // ✅ Always update the refresh token in storage
             await _userManager.SetAuthenticationTokenAsync(user, "MyApp", "RefreshToken", refreshToken);
             await _userManager.SetAuthenticationTokenAsync(user, "MyApp", "RefreshTokenExpiry", refreshTokenExpiry.ToString());
 
@@ -113,9 +131,16 @@ namespace JwtTesting.Controllers
             {
                 rng.GetBytes(randomNumber);
                 var refreshToken = Convert.ToBase64String(randomNumber);
-                var refreshTokenExpiry = DateTime.UtcNow.AddMinutes(3); // Set refresh token to expire in 3 minutes
+                var refreshTokenExpiry = DateTime.UtcNow.AddMinutes(3);
                 return (refreshToken, refreshTokenExpiry);
             }
+        }
+
+        [Authorize(Roles = "Admin")]
+        [HttpGet("admin-only")]
+        public IActionResult AdminOnly()
+        {
+            return Ok("Welcome, Admin!");
         }
 
         [HttpPost("refresh")]

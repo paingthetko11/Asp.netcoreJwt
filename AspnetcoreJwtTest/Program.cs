@@ -1,5 +1,4 @@
 using Microsoft.EntityFrameworkCore;
-using System;
 using Scalar.AspNetCore;
 using AspnetcoreJwtTest;
 using Microsoft.AspNetCore.Identity;
@@ -10,20 +9,27 @@ using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Security.Claims;
+using AspnetcoreJwtTest.Entities;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
-
+// **1. Add Controllers**
 builder.Services.AddControllers();
-// Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
+
+// **2. Add Scalar for API documentation**
 builder.Services.AddOpenApi();
 
-builder.Services.AddDbContext<ApplicationDbContext>(opt => opt.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+// **3. Configure Database Context**
+builder.Services.AddDbContext<ApplicationDbContext>(opt =>
+    opt.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"))
+);
+
+// **4. Configure Identity**
 builder.Services.AddIdentity<IdentityUser, IdentityRole>()
     .AddEntityFrameworkStores<ApplicationDbContext>()
     .AddDefaultTokenProviders();
 
+// **5. Configure JWT Authentication**
 var jwtSettings = builder.Configuration.GetSection("Jwt");
 
 // Ensure JWT key exists
@@ -35,7 +41,6 @@ if (string.IsNullOrEmpty(secretKey) || secretKey.Length < 16)
 
 var key = Encoding.UTF8.GetBytes(secretKey);
 
-// Add Authentication
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -72,36 +77,90 @@ builder.Services.AddAuthentication(options =>
     };
 });
 
+// **6. Register Services**
 builder.Services.AddScoped<ITokenBuilder, TokenBuilder>();
+// Add CORS policy
+//builder.Services.AddCors(options =>
+//{
+//    options.AddPolicy("AllowAll", builder =>
+//    {
+//        builder.AllowAnyOrigin()
+//               .AllowAnyMethod()
+//               .AllowAnyHeader();
+//    });
+//});
 
+// **7. Build App**
 var app = builder.Build();
-// Configure the HTTP request pipeline.
+
+// **8. Configure Scalar API Docs**
 if (app.Environment.IsDevelopment())
 {
-    app.MapOpenApi();
-
-    app.MapScalarApiReference("/docs/scalar");
+    app.MapOpenApi(); // Enable OpenAPI in development
+    app.MapScalarApiReference("/docs/scalar"); // Scalar API documentation
 }
 
+// **9. Middleware Setup**
 app.UseHttpsRedirection();
-
 app.UseAuthentication();
 app.UseAuthorization();
 
-// Handle expired token errors
+// **10. Handle Expired Token Errors**
 app.Use(async (context, next) =>
 {
+    await next();
+
     if (context.Response.StatusCode == 401)
     {
-        context.Response.ContentType = "application/json";
+        //context.Response.ContentType = "application/json";
         await context.Response.WriteAsync("{\"error\": \"Unauthorized\", \"message\": \"The token has expired.\"}");
-    }
-    else
-    {
-        await next();
     }
 });
 
+// **11. Map Controllers**
 app.MapControllers();
 
+using (var scope = app.Services.CreateScope())
+{
+    var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
+    var userManager = scope.ServiceProvider.GetRequiredService<UserManager<IdentityUser>>();
+
+    var roles = new[] { "Admin", "User" };
+
+    // Create roles if they don't exist
+    foreach (var role in roles)
+    {
+        if (!await roleManager.RoleExistsAsync(role))
+        {
+            await roleManager.CreateAsync(new IdentityRole(role));
+        }
+    }
+
+    // Create admin user if it doesn't exist
+    string adminEmail = "admin@admin.com";
+    string adminPassword = "Password@123";
+
+    var adminUser = await userManager.FindByEmailAsync(adminEmail);
+    if (adminUser == null)
+    {
+        adminUser = new IdentityUser { UserName = adminEmail, Email = adminEmail };
+        var result = await userManager.CreateAsync(adminUser, adminPassword);
+        if (result.Succeeded)
+        {
+            await userManager.AddToRoleAsync(adminUser, "Admin");
+        }
+    }
+}
+    //string email = "admin@admin.com";
+    //string password = "Password@123";
+
+    //if (await UserManager.FindbyEmailAsync(email) == null)
+    //    var user = newIdentityUSer();
+    //User.Name = email;
+    //User.Email = email;
+
+    //UserManager.CreateAsync(User,password)
+//}
+
+// **12. Run Application**
 app.Run();

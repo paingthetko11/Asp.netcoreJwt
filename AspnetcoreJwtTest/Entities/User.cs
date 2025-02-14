@@ -20,8 +20,7 @@ public partial class User
     public string? Email { get; set; }
 
     [StringLength(250)]
-    public string? PhoneNumber { get; set; }
-
-    [StringLength(250)]
     public string? Password { get; set; }
+    public string? Role { get; set; }
+    //public string Role { get; internal set; }
 }
