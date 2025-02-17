@@ -23,11 +23,19 @@ builder.Services.AddOpenApi();
 builder.Services.AddDbContext<ApplicationDbContext>(opt =>
     opt.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"))
 );
-
-// **4. Configure Identity**
-builder.Services.AddIdentity<IdentityUser, IdentityRole>()
-    .AddEntityFrameworkStores<ApplicationDbContext>()
-    .AddDefaultTokenProviders();
+builder.Services.AddIdentity<IdentityUser, IdentityRole>(options =>
+{
+    options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(10); // Set lockout duration to 3 minutes
+    options.Lockout.MaxFailedAccessAttempts = 3; // Max failed attempts before lockout
+    options.User.AllowedUserNameCharacters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._@"; // Username validation
+    options.User.RequireUniqueEmail = true; // Ensure unique email addresses
+})
+.AddEntityFrameworkStores<ApplicationDbContext>()
+.AddDefaultTokenProviders();
+//// **4. Configure Identity**
+//builder.Services.AddIdentity<IdentityUser, IdentityRole>()
+//    .AddEntityFrameworkStores<ApplicationDbContext>()
+//    .AddDefaultTokenProviders();
 
 // **5. Configure JWT Authentication**
 var jwtSettings = builder.Configuration.GetSection("Jwt");
@@ -57,7 +65,7 @@ builder.Services.AddAuthentication(options =>
         ValidIssuer = jwtSettings["Issuer"],
         ValidAudience = jwtSettings["Audience"],
         IssuerSigningKey = new SymmetricSecurityKey(key),
-        ClockSkew = TimeSpan.FromMinutes(1) // Ensures token expiration is exact
+        ClockSkew = TimeSpan.FromMinutes(5) // Ensures token expiration is exact
     };
 
     options.Events = new JwtBearerEvents

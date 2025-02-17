@@ -1,5 +1,7 @@
 ﻿using System.Data;
 using System.IdentityModel.Tokens.Jwt;
+using System.Net.Mail;
+using System.Net;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
@@ -28,6 +30,7 @@ namespace JwtTesting.Controllers
         private readonly string _connectionString;
         private readonly SignInManager<IdentityUser> _signInManager;
         private readonly RoleManager<IdentityRole> _roleManager;
+
 
         public AccountController(UserManager<IdentityUser> userManager,
             ITokenBuilder tokenBuilder,
@@ -82,7 +85,17 @@ namespace JwtTesting.Controllers
             {
                 return Unauthorized("Invalid username or password.");
             }
+            var result = await _signInManager.PasswordSignInAsync(user, login.Password, false, true); // false = don't remember the user, true = check for lockout
 
+            if (result.IsLockedOut)
+            {
+                return Unauthorized("Your account is locked due to too many failed login attempts. Please try 3 Minutes again later.");
+            }
+
+            if (!result.Succeeded)
+            {
+                return Unauthorized("Invalid username or password.");
+            }
 
             var (token, refreshToken, refreshTokenExpiry) = await GenerateJwtToken(user);
 
@@ -97,11 +110,11 @@ namespace JwtTesting.Controllers
             var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
             var claims = new List<Claim>
-    {
-        new Claim(JwtRegisteredClaimNames.Sub, user.Id),
-        new Claim(JwtRegisteredClaimNames.Email, user.Email),
-        new Claim(ClaimTypes.NameIdentifier, user.Id)
-    };
+        {
+            new Claim(JwtRegisteredClaimNames.Sub, user.Id),
+            new Claim(JwtRegisteredClaimNames.Email, user.Email),
+            new Claim(ClaimTypes.NameIdentifier, user.Id)
+        };
 
             var roles = await _userManager.GetRolesAsync(user);
             foreach (var role in roles)
@@ -135,6 +148,85 @@ namespace JwtTesting.Controllers
                 return (refreshToken, refreshTokenExpiry);
             }
         }
+        [HttpPost("forgot-password")]
+        public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordModel model)
+        {
+            var user = await _userManager.FindByEmailAsync(model.Email);
+            if (user == null)
+                return BadRequest("User not found.");
+
+            // Generate password reset token
+            var token = await _userManager.GeneratePasswordResetTokenAsync(user);
+
+            // Send email with reset link
+            var resetLink = $"{Request.Scheme}://{Request.Host}/reset-password?email={model.Email}&token={Uri.EscapeDataString(token)}";
+
+            await SendResetEmail(user.Email, resetLink);
+
+            return Ok("Password reset email sent.");
+        }
+        [HttpPost("reset-password")]
+        public async Task<IActionResult> ResetPassword([FromBody] AspnetcoreJwtTest.Entities.ResetPasswordRequest request)
+        {
+            if (request == null || string.IsNullOrWhiteSpace(request.Email) ||
+                string.IsNullOrWhiteSpace(request.Token) || string.IsNullOrWhiteSpace(request.NewPassword))
+            {
+                return BadRequest("Invalid request.");
+            }
+
+            var user = await _userManager.FindByEmailAsync(request.Email);
+            if (user == null)
+            {
+                return BadRequest("No account found with that email address.");
+            }
+
+            // Decode the token (to prevent corruption due to URL encoding issues)
+            var decodedToken = WebUtility.UrlDecode(request.Token);
+
+            // Verify token before resetting password
+            var isValid = await _userManager.VerifyUserTokenAsync(user, TokenOptions.DefaultProvider, "ResetPassword", decodedToken);
+            if (!isValid)
+            {
+                return BadRequest("Invalid or expired token.");
+            }
+
+            // Attempt password reset
+            var result = await _userManager.ResetPasswordAsync(user, decodedToken, request.NewPassword);
+
+            if (!result.Succeeded)
+            {
+                var errors = string.Join(", ", result.Errors.Select(e => e.Description));
+                return BadRequest($"Password reset failed: {errors}");
+            }
+
+            return Ok("Password reset successful.");
+        }
+
+        // **Helper function to send reset email**
+        private async Task SendResetEmail(string email, string token)
+        {
+            var resetLink = $"{Request.Scheme}://{Request.Host}/reset-password?token={token}";
+            var subject = "Password Reset Request";
+            var body = $"Click here to reset your password: <a href=\"{resetLink}\">Reset Password</a>";
+
+            var smtpClient = new SmtpClient("smtp.your-email-provider.com")
+            {
+                Port = 587,
+                Credentials = new NetworkCredential("your-email@domain.com", "your-email-password"),
+                EnableSsl = true,
+            };
+
+            var mailMessage = new MailMessage
+            {
+                From = new MailAddress("your-email@domain.com"),
+                Subject = subject,
+                Body = body,
+                IsBodyHtml = true,
+            };
+            mailMessage.To.Add(email);
+
+            await smtpClient.SendMailAsync(mailMessage);
+        }
 
         [Authorize(Roles = "Admin")]
         [HttpGet("admin-only")]
@@ -142,6 +234,7 @@ namespace JwtTesting.Controllers
         {
             return Ok("Welcome, Admin!");
         }
+
 
         [HttpPost("refresh")]
         public async Task<IActionResult> Refresh([FromBody] TokenRequest tokenRequest) // Ensure this matches your model
