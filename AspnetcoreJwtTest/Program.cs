@@ -98,6 +98,19 @@ builder.Services.AddScoped<ITokenBuilder, TokenBuilder>();
 //    });
 //});
 
+// Enable Cors
+_ = builder.Services.AddCors(options =>
+{
+    options.AddPolicy(name: "AllowedCorsOrigins",
+        builder =>
+        {
+            _ = builder
+                .AllowAnyHeader()
+                .AllowAnyMethod()
+                .AllowCredentials();
+        });
+});
+
 // **7. Build App**
 var app = builder.Build();
 
@@ -110,6 +123,8 @@ if (app.Environment.IsDevelopment())
 
 // **9. Middleware Setup**
 app.UseHttpsRedirection();
+
+app.UseCors("AllowedCorsOrigins");
 app.UseAuthentication();
 app.UseAuthorization();
 
@@ -159,15 +174,15 @@ using (var scope = app.Services.CreateScope())
         }
     }
 }
-    //string email = "admin@admin.com";
-    //string password = "Password@123";
+//string email = "admin@admin.com";
+//string password = "Password@123";
 
-    //if (await UserManager.FindbyEmailAsync(email) == null)
-    //    var user = newIdentityUSer();
-    //User.Name = email;
-    //User.Email = email;
+//if (await UserManager.FindbyEmailAsync(email) == null)
+//    var user = newIdentityUSer();
+//User.Name = email;
+//User.Email = email;
 
-    //UserManager.CreateAsync(User,password)
+//UserManager.CreateAsync(User,password)
 //}
 
 // **12. Run Application**
