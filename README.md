@@ -1,17 +1,17 @@
 # ASP.NET Core JWT Authentication API
 
-ASP.NET Core 9 Web API ဥပမာ project ဖြစ်ပြီး ASP.NET Core Identity, SQL Server, JWT access token နှင့် refresh token များကို အသုံးပြုထားသည်။ Development environment တွင် Scalar API documentation ကိုလည်း ဖွင့်ပေးသည်။
+An ASP.NET Core 9 Web API sample that uses ASP.NET Core Identity, SQL Server, JWT access tokens, and refresh tokens. Scalar API documentation is available in the Development environment.
 
-## လိုအပ်ချက်များ
+## Requirements
 
 - .NET 9 SDK
-- SQL Server (local သို့မဟုတ် remote instance)
+- SQL Server (local or remote instance)
 - Entity Framework Core command-line tool (`dotnet-ef`)
 
-## စတင်အသုံးပြုရန်
+## Getting started
 
-1. `AspnetcoreJwtTest/appsettings.json` သို့မဟုတ် `AspnetcoreJwtTest/appsettings.Development.json` တွင် `ConnectionStrings:DefaultConnection` ကို မိမိ SQL Server အတွက် ပြင်ဆင်ပါ။ JWT အတွက် `Jwt:Key`, `Jwt:Issuer` နှင့် `Jwt:Audience` တို့ကိုလည်း သတ်မှတ်ပါ။ Key သည် အနည်းဆုံး 16 characters ရှိရမည်။
-2. Repository root မှ အောက်ပါ command များကို run ပါ။
+1. Configure `ConnectionStrings:DefaultConnection` in `AspnetcoreJwtTest/appsettings.json` or `AspnetcoreJwtTest/appsettings.Development.json` for your SQL Server. Also set `Jwt:Key`, `Jwt:Issuer`, and `Jwt:Audience`. The key must be at least 16 characters long.
+2. Run these commands from the repository root:
 
    ```bash
    dotnet tool install --global dotnet-ef
@@ -20,45 +20,45 @@ ASP.NET Core 9 Web API ဥပမာ project ဖြစ်ပြီး ASP.NET Cor
    dotnet run --project AspnetcoreJwtTest/AspnetcoreJwtTest.csproj
    ```
 
-   `dotnet-ef` ကို အရင်က install လုပ်ထားပြီးပါက install command ကို ကျော်နိုင်သည်။
-3. Development environment မှာ API docs ကို `https://localhost:<port>/docs/scalar` တွင် ဖွင့်ပါ။ အသုံးပြုမည့် port ကို terminal ရှိ application output သို့မဟုတ် `AspnetcoreJwtTest/Properties/launchSettings.json` မှ ကြည့်နိုင်သည်။
+   If `dotnet-ef` is already installed, skip the install command.
+3. In Development, open the API documentation at `https://localhost:<port>/docs/scalar`. Find the port in the application output or `AspnetcoreJwtTest/Properties/launchSettings.json`.
 
 ## Configuration
 
-အရေးကြီးသော configuration များကို environment variable ဖြင့်လည်း ထည့်နိုင်သည်။ .NET configuration key များတွင် `:` အစား `__` သုံးပါ။
+You can also provide configuration through environment variables. Use `__` in place of `:` in .NET configuration keys.
 
 ```text
 ConnectionStrings__DefaultConnection=<SQL Server connection string>
-Jwt__Key=<အနည်းဆုံး 16 characters ရှိသော လျှို့ဝှက် key>
+Jwt__Key=<secret key with at least 16 characters>
 Jwt__Issuer=<token issuer>
 Jwt__Audience=<token audience>
 ```
 
-Password reset email ပို့ခြင်းအတွက် SMTP server နှင့် sender credentials ကို `AccountController` ရှိ `SendResetEmail` မှာ လက်ရှိ placeholder များအစား သတ်မှတ်ရန်လိုသည်။
+To send password reset emails, replace the SMTP server and sender credential placeholders in `AccountController`'s `SendResetEmail` method with your SMTP settings.
 
 ## API endpoints
 
 Base path: `/api/Account`
 
-| Method | Path | ရည်ရွယ်ချက် |
+| Method | Path | Description |
 | --- | --- | --- |
-| `POST` | `/register` | User အသစ်ဖန်တီးရန်။ Body: `{"userName":"user1","email":"user@example.com","password":"StrongPassword1!","role":"User"}`။ `role` မပေးပါက `User` ကို သုံးသည်။ |
-| `POST` | `/login` | Email နှင့် password ဖြင့် login ဝင်ပြီး access token နှင့် refresh token ရယူရန်။ Body: `{"email":"user@example.com","password":"StrongPassword1!"}` |
-| `POST` | `/refresh` | သက်တမ်းကုန်သွားသော access token နှင့် refresh token ကို ပေး၍ token အသစ်ရယူရန်။ Body: `{"accessToken":"<expired-access-token>","refreshToken":"<refresh-token>"}` |
-| `POST` | `/forgot-password` | Password reset email တောင်းရန်။ Body: `{"email":"user@example.com"}` |
-| `POST` | `/reset-password` | Reset token ဖြင့် password အသစ်ထားရန်။ Body: `{"email":"user@example.com","token":"<reset-token>","newPassword":"NewStrongPassword1!"}` |
-| `GET` | `/admin-only` | `Admin` role ရှိသော JWT ဖြင့်သာ အသုံးပြုနိုင်သည်။ Header: `Authorization: Bearer <access-token>` |
+| `POST` | `/register` | Create a user. Body: `{"userName":"user1","email":"user@example.com","password":"StrongPassword1!","role":"User"}`. The role defaults to `User` when omitted. |
+| `POST` | `/login` | Sign in with an email and password to receive an access token and refresh token. Body: `{"email":"user@example.com","password":"StrongPassword1!"}` |
+| `POST` | `/refresh` | Exchange an expired access token and refresh token for new tokens. Body: `{"accessToken":"<expired-access-token>","refreshToken":"<refresh-token>"}` |
+| `POST` | `/forgot-password` | Request a password reset email. Body: `{"email":"user@example.com"}` |
+| `POST` | `/reset-password` | Set a new password using a reset token. Body: `{"email":"user@example.com","token":"<reset-token>","newPassword":"NewStrongPassword1!"}` |
+| `GET` | `/admin-only` | Requires a JWT belonging to a user with the `Admin` role. Header: `Authorization: Bearer <access-token>` |
 
-Login ရရှိသော access token သည် 1 မိနစ်၊ refresh token သည် 3 မိနစ် သက်တမ်းရှိသည်။ Login မအောင်မြင်မှု 3 ကြိမ်ရှိလျှင် Identity lockout ကို အသုံးပြုသည်။
+Access tokens expire after 1 minute and refresh tokens expire after 3 minutes. Identity locks an account after 3 failed login attempts.
 
 ## Development admin account
 
-Application စတင်ချိန်တွင် `Admin` နှင့် `User` role များကို ဖန်တီးပြီး `admin@admin.com` အတွက် development admin account ကိုလည်း seed လုပ်သည်။ လက်ရှိ password သည် source code ထဲတွင် hard-coded ထားသော `Password@123` ဖြစ်သည်။ Local development အတွက်သာ အသုံးပြုပါ။ အများသုံး သို့မဟုတ် production environment တွင် မသုံးမီ seed logic နှင့် credential များကို ဖယ်ရှား/ပြောင်းလဲပြီး secrets များကို source control ထဲ မသိမ်းပါနှင့်။
+On startup, the application creates the `Admin` and `User` roles and seeds a development admin account for `admin@admin.com`. Its current password, `Password@123`, is hard-coded in the source code. Use this account only for local development. Before using the application in a shared or production environment, remove or change the seed logic and credentials, and keep secrets out of source control.
 
 ## Project structure
 
-- `AspnetcoreJwtTest/Controllers/` — API controllers နှင့် authentication endpoints
-- `AspnetcoreJwtTest/Entities/` — Request models, Identity entities, application entities
-- `AspnetcoreJwtTest/Services/` — Token builder နှင့် email sender services
+- `AspnetcoreJwtTest/Controllers/` — API controllers and authentication endpoints
+- `AspnetcoreJwtTest/Entities/` — Request models, Identity entities, and application entities
+- `AspnetcoreJwtTest/Services/` — Token builder and email sender services
 - `AspnetcoreJwtTest/Data/` — Entity Framework database context
 - `AspnetcoreJwtTest/Migrations/` — Database schema migrations
